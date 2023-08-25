@@ -1,12 +1,20 @@
 # PaddleQuestion
 
+### 20230825 11:00
 
 #### 1.新 IR 下的 Pass 是啥, 文档在哪里?
 
-一个独立应用于图变换的模块机制，比如算子融合
+一个独立应用于图变换的模块机制，比如算子融合，在目录`paddle/ir/pass/`下
 
-#### 2.block 等概念是指？文档在哪里？
+比如 `dropout p=0` 时, 就可以删除掉 dropout
 
+感兴趣可以查看 Pass 类的 ApplyImpl(graph) 虚函数
+
+#### 2.block region 等概念是指？文档在哪里？
+
+CINN 旧IR 都有, (计算图表示 ProgramDesc) block 有很多 Op, 更像是一个管理容器，block 不嵌套，里面会有控制流
+
+region 类似作用域
 
 #### 3.OpDesc 是 Op 的 description ？还是说是一个算子对象? OpTranslator 返回的函数指针，将 OpDesc 翻译为 Operation.
 
@@ -19,7 +27,16 @@ OpDesc(const std::string &type,
        const AttributeMap &attrs);
 ```
 
+OpDesc 会和 OpProto 相对应，OpDesc 旧IR, Operation是 新IR
+
+旧IR: OpMaker 和 Kernel , 前者是数据输入的描述, 是一个表述层, 后者计算层，怎么支持不同计算设备(XPU)，计算逻辑，硬件分发, 前者类似是前端，后者类似后端，一个 Op 会有多个 kernel
+
+OpTranslator 是 旧IR 转 新IR
+
+
 #### 4.`ir::IrContext` Context 是什么, 之前好像每个算子都有这个 Context 参数
+
+是一个中央管理器，管理 Dialect type attr，所有的存储都会放到这里
 
 #### 5.`pd.`命名空间是 paddle ?
 
@@ -34,6 +51,7 @@ OpDesc(const std::string &type,
 
 
 (OpInfo `pd.matmul_with_flatten` 为啥不存在, `op_compat.yaml`不是有吗? 为啥 `ctx->GetRegisteredOpInfo` 中获取不到 `pd.matmul_with_flatten` )
+( 可能 yaml 中 matmul_with_flatten (mul) 这种语法有些问题? )
 
 ```c++
 const auto& op_info = ctx->GetRegisteredOpInfo(target_op_name);
@@ -51,7 +69,7 @@ const auto& op_info = ctx->GetRegisteredOpInfo(target_op_name);
 (为啥上边的 yaml 中，没有 inputs 和 outputs 这两项? 这个是和 `paddle/phi/kernels/cpu/matmul_kernel.cc` 下定义的一样吗)
 
 我是需要看 `MatmulWithFlattenKernel` 的实现去找对应的属性吗?
-
+可以查看 `fluid/operators/mul_op/cc` 来看对应的属性, 但是新的 IR 要求与 Kernel 对齐, 不过当前题目 operators 签名和 kernels 签名一致，
 
 报错内容是:
 ```
