@@ -17,8 +17,81 @@
 
 #### 3. Dialect 的概念是否可以明确一下，和 Context 类似？
 
+IR 框架作为一个最底层的动态库，提供算子、类型等的基础设施和注册接口，由上层按需使用。
+同时，IR 库提供内置 Dialect, 注册一些最常见的类型和算子。
+
+> Dialect 用来对 Type、Attribtue、Op做模块化管理， 比如 BuiltinDialect、PaddleDialect、CinnDialect等等。一个Dialect 里面包含了一系列的 Type、Attribtue、Op的定义。相应的，每个 Type、Attribtue、Op都是定义在某个唯一的 Dialect 里面。对整个 IR 框架而言， Dialect 是可以随意插拔的。
+>
+> Dialect 也是可以任意扩展的。只要派生自相应的基类、定义所以所拥有的 Type 、 Attrbute 、Op 即可。
+>
+> 这一层是 IR 适应多种场景的基础。这一层的每一个要素都是可定制化扩展的，一般情况下，针对一个具体的场景，比如分布式、编译器。都需要定义自己需要用到的Trait、Interfce，然后定义自己的Dialect，在自己的Dialect里面，定义自己需要用到的 Type、Attribute、Op。
 
 
+
+#### 4. (想问下这个宏就类似 switch 语句吗)
+
+```c++
+// 转换通过先判断typeid，以C++作为桥梁进行判断
+template <typename T>
+inline bool IsType(const std::type_index& type) {
+  return type == typeid(T);
+}
+
+#define PD_FOR_EACH_DATA_TYPE(_)      \
+  _(bool, DataType::BOOL)             \
+  _(int8_t, DataType::INT8)           \
+  _(uint8_t, DataType::UINT8)         \
+  _(int16_t, DataType::INT16)         \
+  _(uint16_t, DataType::UINT16)       \
+  _(int32_t, DataType::INT32)         \
+  _(uint32_t, DataType::UINT32)       \
+  _(int64_t, DataType::INT64)         \
+  _(uint64_t, DataType::UINT64)       \
+  _(bfloat16, DataType::BFLOAT16)     \
+  _(float16, DataType::FLOAT16)       \
+  _(float, DataType::FLOAT32)         \
+  _(double, DataType::FLOAT64)        \
+  _(complex64, DataType::COMPLEX64)   \
+  _(complex128, DataType::COMPLEX128) \
+  _(pstring, DataType::PSTRING)
+
+```
+
+#### 5. lod_level 的含义
+
+比如 DenseTensorType 需要传递 shape、lod_level、data_type作为参数
+
+
+#### 6. isa 的意思是?
+
+判断两个类型相等， 直接用相等运算符。这个主要用来做类型验证，比如 Op 定义中约束了算子的输入类型。可通过该接口判定类型是否满足约束。
+```
+Type. type1, type2;
+........
+if(type1 == type2) {
+......}
+
+if(type1 != type2) {
+.......}
+```
+
+判断是否是某种类型, 用 isa 接口(关于 isa 接口和下文的 dyn_cast 接口的实现，在后文的具体实现中会讲到)
+```
+Type type1;
+.....
+
+// type的impl指针里面存储了AbstractType*指针，里面有TypeID对象，所以只需要判断该TypeID和 LoDTensorType的TypeID是否一致即可实现isa接口。
+if(type1.isa<LoDTensorType>()) {
+   .....
+}
+```
+
+#### 7. 计算图有环怎么理解, UD链 是什么
+
+一方面，**计算图** 有环。
+另一方面，效率也不高，要想知道一个变量都被哪些算子关联了，就必须遍历 block 中所有算子的所有输入输出，进行字符串比对。
+在 Graph 中，一方面，变量和算子被同时抽象为了计算图节点，这增加了图优化的复杂度。
+另一方面，Graph 内嵌了 Program ，图优化不仅要处理图节点的UD链，还得处理图节点内嵌的 OpDesc & VarDesc 的 UD链，进一步增加了图优化的复杂度。编译器相对前沿一些，它的 Grpah 里面没有内嵌 Program 。 它也严格明确了，计算图中算子为节点，变量为边。
 
 
 ### 20230825 11:00
