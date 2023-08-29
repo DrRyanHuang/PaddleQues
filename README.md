@@ -194,8 +194,25 @@ paddle/phi/api/yaml/op_compat.yaml 中的修改是否正确:
 `pd.xxxx` 所拥有的算子在哪里看，只能从 `paddle/fluid/operators/xxx_op.cc` 下找 `XXXOpMaker` , 还是有一个统一的 yaml 文件，比如 `op_compat.yaml`
 
 
+编译 `matmul_v2_grad` 这个 key 在 Python 端找不到，这个是要在哪里注册一下吗?
 
-
+```shell
+2023-08-29 17:54:34 validate op yaml:
+2023-08-29 17:54:34 - /workspace/Paddle/paddle/fluid/operators/generator/parsed_ops/ops.parsed.yaml
+2023-08-29 17:54:34 - /workspace/Paddle/paddle/fluid/operators/generator/parsed_ops/backward_ops.parsed.yaml
+2023-08-29 17:54:42 create or remove auto-geneated operators: generated_op(1-4).cc.tmp
+2023-08-29 17:54:42 create or remove auto-geneated argument mappings: /workspace/Paddle/paddle/phi/ops/compat/generated_sig.cc.tmp
+2023-08-29 17:54:49 Traceback (most recent call last):
+2023-08-29 17:54:49   File "/workspace/Paddle/paddle/fluid/operators/generator/generate_op.py", line 723, in <module>
+2023-08-29 17:54:49     main(
+2023-08-29 17:54:49   File "/workspace/Paddle/paddle/fluid/operators/generator/generate_op.py", line 648, in main
+2023-08-29 17:54:49     add_compat_name(op_fluid_map_list, forward_op_dict, backward_op_dict)
+2023-08-29 17:54:49   File "/workspace/Paddle/paddle/fluid/operators/generator/generate_op.py", line 302, in add_compat_name
+2023-08-29 17:54:49     backward_op_item = backward_op_dict[forward_op_item['backward']]
+2023-08-29 17:54:49 KeyError: 'matmul_v2_grad'
+2023-08-29 17:54:49 CMake Error at paddle/fluid/operators/generator/CMakeLists.txt:257 (message):
+2023-08-29 17:54:49   operator codegen failed, exiting.
+```
 
 
 
