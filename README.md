@@ -177,6 +177,25 @@ https://github.com/PaddlePaddle/Paddle/pull/56550/files
 // }
 ```
 
+paddle/phi/api/yaml/op_compat.yaml 中的修改是否正确:
+
+
+```shell
+- op : matmul_with_flatten (mul)
+  backward : matmul_with_flatten_grad (mul_grad)
+
+<!-- 把 matmul_with_flatten 替换为 matmul -->
+- op : matmul (mul)
+  backward : matmul (mul_grad)
+```
+
+之前 pd.matmul_with_flatten 不存在，现在是否有 pd.matmul 不存在的问题
+
+`pd.xxxx` 所拥有的算子在哪里看，只能从 `paddle/fluid/operators/xxx_op.cc` 下找 `XXXOpMaker` , 还是有一个统一的 yaml 文件，比如 `op_compat.yaml`
+
+
+
+
 
 
 
