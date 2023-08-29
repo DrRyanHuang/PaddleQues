@@ -1,7 +1,7 @@
 # PaddleQuestion
 
 
-### 202308xx 11:00
+### 20230829 20:00
 
 #### 1. GraphCompiler 作用是啥?
 
@@ -61,8 +61,11 @@ inline bool IsType(const std::type_index& type) {
 
 比如 DenseTensorType 需要传递 shape、lod_level、data_type作为参数
 
+> LoD (Level of Details) information
 
 #### 6. isa 的意思是?
+
+类似 is instance of ?
 
 判断两个类型相等， 直接用相等运算符。这个主要用来做类型验证，比如 Op 定义中约束了算子的输入类型。可通过该接口判定类型是否满足约束。
 ```
@@ -92,6 +95,91 @@ if(type1.isa<LoDTensorType>()) {
 另一方面，效率也不高，要想知道一个变量都被哪些算子关联了，就必须遍历 block 中所有算子的所有输入输出，进行字符串比对。
 在 Graph 中，一方面，变量和算子被同时抽象为了计算图节点，这增加了图优化的复杂度。
 另一方面，Graph 内嵌了 Program ，图优化不仅要处理图节点的UD链，还得处理图节点内嵌的 OpDesc & VarDesc 的 UD链，进一步增加了图优化的复杂度。编译器相对前沿一些，它的 Grpah 里面没有内嵌 Program 。 它也严格明确了，计算图中算子为节点，变量为边。
+
+
+#### 8. "插入到 program 中？为什么在这里插入？" 文档中的问题
+
+```
+ir::Operation* OpTranscriber::operator()(ir::IrContext* ctx,
+                                         TranslationContext* param_map,
+                                         const OpDesc& op_desc,
+                                         ir::Program* program) {
+  auto op_info = this->LoopkUpOpInfo(ctx, op_desc); // 根据 Op name 获取 op info
+  auto* op_info_concept =
+      op_info.GetInterfaceImpl<dialect::OpYamlInfoInterface>();
+
+  OpInputInfoList input_infos;
+  OpAttributeInfoList attr_infos;
+  OpOutputInfoList output_infos;
+  std::tie(input_infos, attr_infos, output_infos, std::ignore) =
+      op_info_concept->get_op_info_();
+
+  this->InsertSliceOperationForInput(
+      ctx, param_map, op_desc, input_infos, program);
+
+  auto op_inputs = this->GenerateOperationInput( // 获取 Input
+      ctx, param_map, op_desc, op_info.name(), input_infos, program);
+
+  OpOutputMapping arg_to_idx;
+  OpOutputTypeList op_output_types;
+  std::tie(op_output_types, arg_to_idx) =
+      this->GenerateOperationOutput(ctx, op_desc, output_infos); // 获取 output_types
+
+  auto attribute_map =
+      this->TranslateOpAttribute(ctx, op_info.name(), attr_infos, op_desc); // 获取 attributes
+  VLOG(4) << "[general op][" << op_desc.Type() << "] preparation end.";
+
+  ir::Operation* operation =
+      ir::Operation::Create(op_inputs, attribute_map, op_output_types, op_info); // 创建 operation
+  VLOG(4) << "[general op][" << op_desc.Type() << "] opearation creation end.";
+  program->block()->push_back(operation); // 插入到 program 中？为什么在这里插入？
+
+  VLOG(4) << "[general op][" << op_desc.Type() << "] opearation insertion end.";
+  this->RecordOpResultMapping(ctx, param_map, op_desc, operation, arg_to_idx); // 记录 Var 和 value 的对应关系
+
+  return operation;
+}
+```
+
+
+#### 9. 文档 paddle/fluid/operators/mul_op.cc   6->5 的问题
+
+```
+`x_num_col_dims` dimensions' sizes, and width of the flattened
+matrix is equal to the product of $X$'s last `rank(x) - num_col_dims`
+dimensions' size. For example, suppose $X$ is a 6-dimensional       <-------- 5维
+tensor with the shape [2, 3, 4, 5, 6], and `x_num_col_dims` = 3.
+Thus, the flattened matrix will have a shape [2 x 3 x 4, 5 x 6] =
+[24, 30].
+```
+
+
+#### 10. paddle/fluid/ir_adaptor/translator/op_translator.cc 有关 -1 静态图的问题
+
+https://github.com/PaddlePaddle/Paddle/pull/56550/files
+
+```c++
+// -------------- 这里会有静态图涉及到的问题吗 --------------
+// if (std::find(x_shape.begin(), x_shape.end(), -1) == x_shape.end()) 
+// else {
+//   auto shape_op = builder.Build<dialect::ShapeOp>(x_value);
+//   auto append_shape_op = builder.Build<dialect::FullIntArrayOp>(
+//       std::vector<int64_t>(append_size, 1),
+//       phi::DataType::INT64,
+//       phi::CPUPlace());
+//   auto y_true_shape_op = builder.Build<ir::CombineOp>(
+//       std::vector<ir::OpResult>{shape_op.out(), append_shape_op.out()});
+//   auto concat_op =
+//       builder.Build<dialect::ConcatOp>(y_true_shape_op.out(), 0);
+//   auto y_new_shape = concat_op.out();
+//   auto reshape_op = builder.Build<dialect::ReshapeOp>(y_value, y_new_shape);
+//   y_new = reshape_op.out();
+// }
+```
+
+
+
+
 
 
 ### 20230825 11:00
@@ -163,7 +251,7 @@ const auto& op_info = ctx->GetRegisteredOpInfo(target_op_name);
 (为啥上边的 yaml 中，没有 inputs 和 outputs 这两项? 这个是和 `paddle/phi/kernels/cpu/matmul_kernel.cc` 下定义的一样吗)
 
 我是需要看 `MatmulWithFlattenKernel` 的实现去找对应的属性吗?
-可以查看 `fluid/operators/mul_op/cc` 来看对应的属性, 但是新的 IR 要求与 Kernel 对齐, 不过当前题目 operators 签名和 kernels 签名一致，
+可以查看 `fluid/operators/mul_op/cc` 来看对应的属性(在 `MulOpMaker` 中), 但是新的 IR 要求与 Kernel 对齐, 不过当前题目 operators 签名和 kernels 签名一致，
 
 报错内容是:
 ```
